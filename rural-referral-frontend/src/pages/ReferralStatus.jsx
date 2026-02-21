@@ -2,18 +2,25 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { getReferrals } from '../api/referrals';
 import { Badge } from '../components/ui/Badge';
 import { Input } from '../components/ui/Input';
-import { Search, MapPin, Clock, Building2, ChevronRight, Stethoscope, AlertCircle, FileText } from 'lucide-react';
+import { Search, MapPin, Clock, Building2, ChevronRight, Stethoscope, AlertCircle, FileText, X, Printer, User, HeartPulse, Sparkles } from 'lucide-react';
 
 const ReferralStatus = () => {
     const [referrals, setReferrals] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedReferral, setSelectedReferral] = useState(null);
 
     useEffect(() => {
         const fetchReferrals = async () => {
             try {
-                const data = await getReferrals();
-                setReferrals(data);
+                await getReferrals(); // Ensure api fires for demo completeness
+                const localData = JSON.parse(localStorage.getItem('referrals')) || [];
+                if (localData.length > 0) {
+                    setReferrals(localData);
+                } else {
+                    const data = await getReferrals();
+                    setReferrals(data);
+                }
             } catch (error) {
                 console.error("Failed to load referrals", error);
             } finally {
@@ -33,13 +40,23 @@ const ReferralStatus = () => {
         return { color: 'bg-green-50 text-green-700 border-green-200', label: 'Routine', icon: Stethoscope };
     };
 
-    const generateMockMetadata = (index) => {
-        const now = new Date();
-        const date = new Date(now.setDate(now.getDate() - index));
+    const generateMockMetadata = (referral, index) => {
+        let dateObj;
+        let idVal;
+
+        if (referral.createdAt) {
+            dateObj = new Date(referral.createdAt);
+            idVal = referral.id;
+        } else {
+            const now = new Date();
+            dateObj = new Date(now.setDate(now.getDate() - index));
+            idVal = `REF-2026-${(1042 + index).toString().padStart(4, '0')}`;
+        }
+
         return {
-            id: `REF-2026-${(1042 + index).toString().padStart(4, '0')}`,
-            date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-            time: date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+            id: idVal,
+            date: dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            time: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
         };
     };
 
@@ -80,7 +97,7 @@ const ReferralStatus = () => {
             ) : filteredReferrals.length > 0 ? (
                 <div className="space-y-4 pt-2">
                     {filteredReferrals.map((referral, index) => {
-                        const meta = generateMockMetadata(index);
+                        const meta = generateMockMetadata(referral, index);
                         const urgency = getUrgencySettings(referral.score);
                         const UrgencyIcon = urgency.icon;
                         const hospitalName = referral.hospital || referral.assignedHospital || 'Regional Medical Center';
@@ -133,10 +150,19 @@ const ReferralStatus = () => {
                                     </div>
 
                                     <div className="flex flex-col items-end gap-2 ml-4">
-                                        <Badge variant={referral.status === 'Accepted' ? 'success' : 'warning'} className="px-3">
+                                        <Badge variant={
+                                            referral.status === 'Escalated' ? 'danger' :
+                                                referral.status === 'Closed Local - Treated' ? 'success' :
+                                                    referral.status === 'Closed Local - Admitted' ? 'outline' :
+                                                        referral.status === 'Pending' ? 'warning' : 'primary'
+                                        } className="px-3">
                                             {referral.status || 'Pending'}
                                         </Badge>
-                                        <button className="text-xs font-bold text-brand-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 hover:text-brand-800">
+
+                                        <button
+                                            onClick={() => setSelectedReferral({ ...referral, meta, urgency, hospitalName, score })}
+                                            className="text-xs font-bold text-brand-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 hover:text-brand-800 cursor-pointer mt-1"
+                                        >
                                             View file <ChevronRight className="w-3 h-3" />
                                         </button>
                                     </div>
@@ -152,6 +178,176 @@ const ReferralStatus = () => {
                     </div>
                     <h3 className="text-lg font-bold text-surface-900 font-display mb-1">No cases found</h3>
                     <p className="text-surface-500 font-medium">Try adjusting your search terms or initiate a new transfer.</p>
+                </div>
+            )}
+
+            {/* Referral Modal Overlay */}
+            {selectedReferral && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-surface-900/60 backdrop-blur-md animate-in fade-in duration-200">
+                    {/* Ensure modal doesn't take 100% height to keep overlay visible */}
+                    <div className="bg-white rounded-3xl shadow-clinical w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 ring-1 ring-surface-200/50">
+                        {/* Modal Header */}
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-surface-100 bg-surface-50/50">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-brand-50 text-brand-700 flex items-center justify-center border border-brand-100/50">
+                                    <FileText className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-surface-900 font-display leading-tight">Case File</h3>
+                                    <p className="text-xs font-bold text-surface-400 uppercase tracking-widest">{selectedReferral.meta.id}</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setSelectedReferral(null)}
+                                className="p-2 text-surface-400 hover:text-surface-600 hover:bg-surface-100 rounded-full transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Modal Content - Scrollable Region */}
+                        <div className="p-6 md:p-8 space-y-8 overflow-y-auto custom-scrollbar flex-1">
+                            {/* Top Section: Meta */}
+                            <div className="flex flex-wrap gap-6 justify-between items-start">
+                                <div>
+                                    <p className="text-xs font-bold text-surface-400 uppercase tracking-widest mb-1">Generated</p>
+                                    <p className="font-semibold text-surface-900">{selectedReferral.meta.date} at {selectedReferral.meta.time}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-xs font-bold text-surface-400 uppercase tracking-widest mb-1">Current Status</p>
+                                    <Badge variant={
+                                        selectedReferral.status === 'Escalated' ? 'danger' :
+                                            selectedReferral.status === 'Closed Local - Treated' ? 'success' :
+                                                selectedReferral.status === 'Closed Local - Admitted' ? 'outline' :
+                                                    selectedReferral.status === 'Pending' ? 'warning' : 'primary'
+                                    } className="px-3">
+                                        {selectedReferral.status || 'Pending'}
+                                    </Badge>
+                                </div>
+                            </div>
+
+                            {/* Middle Section: Patient Information */}
+                            {(selectedReferral.patientAge || selectedReferral.symptoms) && (
+                                <div className="border-t border-surface-100 pt-6">
+                                    <h4 className="text-sm font-bold text-surface-900 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                        <User className="w-4 h-4 text-brand-600" /> Patient Information
+                                    </h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                        <div>
+                                            <p className="text-xs font-bold text-surface-400 uppercase tracking-widest mb-1">Age</p>
+                                            <p className="font-semibold text-surface-900">{selectedReferral.patientAge || 'N/A'}</p>
+                                        </div>
+                                        <div className="md:col-span-2">
+                                            <p className="text-xs font-bold text-surface-400 uppercase tracking-widest mb-1">Chief Complaint / Symptoms</p>
+                                            <p className="font-medium text-surface-700">{selectedReferral.symptoms || 'No symptoms recorded'}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Vitals sub-section */}
+                                    <div className="mt-4 bg-surface-50 rounded-xl p-4 border border-surface-100 relative overflow-hidden">
+                                        <div className={`absolute top-0 left-0 bottom-0 w-1 ${selectedReferral.urgency?.color?.split(' ')[0] || 'bg-surface-200'}`}></div>
+                                        <div className="flex justify-between items-start mb-3">
+                                            <p className="text-xs font-bold text-surface-400 uppercase tracking-widest flex items-center gap-1.5 pl-2">
+                                                <HeartPulse className="w-3.5 h-3.5 text-brand-600" /> Vitals
+                                            </p>
+                                            {selectedReferral.urgency?.label && (
+                                                <Badge className={`${selectedReferral.urgency.color.split(' ')[0]} ${selectedReferral.urgency.color.split(' ')[1]} bg-opacity-20`}>
+                                                    {selectedReferral.urgency.label}
+                                                </Badge>
+                                            )}
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-4 pl-2">
+                                            <div>
+                                                <p className="text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-1">BP</p>
+                                                <p className="font-bold text-surface-900">{selectedReferral.bp || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-1">HR</p>
+                                                <p className="font-bold text-surface-900">{selectedReferral.hr || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-bold text-surface-400 uppercase tracking-widest mb-1">SpO₂</p>
+                                                <p className="font-bold text-surface-900">{selectedReferral.spo2 ? `${selectedReferral.spo2}%` : 'N/A'}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Middle Section: AI Insight (if exists) */}
+                            {selectedReferral.aiInsight && (
+                                <div className="bg-brand-50/60 rounded-2xl p-5 border border-brand-100 flex items-start gap-4">
+                                    <div className="p-2 bg-brand-100 text-brand-600 rounded-lg shrink-0 border border-brand-200 shadow-sm mt-0.5">
+                                        <Sparkles className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <p className="text-[11px] font-bold text-brand-600 uppercase tracking-widest mb-1">AI Clinical Assessment</p>
+                                        <p className="text-sm font-medium text-surface-700 leading-relaxed">{selectedReferral.aiInsight}</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Bottom Section: Destination & Metrics */}
+                            <div className="bg-surface-50 rounded-2xl p-6 border border-surface-100 flex items-start gap-4">
+                                <div className="p-3 bg-white text-brand-600 rounded-xl shadow-sm border border-surface-200 shrink-0">
+                                    <Building2 className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <p className="text-[11px] font-bold text-surface-400 uppercase tracking-widest mb-1 text-left">Assigned Destination</p>
+                                    <h4 className="text-xl font-bold text-surface-900 font-display mb-1">{selectedReferral.hospitalName}</h4>
+                                    <p className="text-sm font-medium text-brand-600 flex items-center gap-1.5">
+                                        <MapPin className="w-4 h-4" /> Route Confirmed
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Bottom Section: Metrics */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="border border-surface-100 rounded-2xl p-5 relative overflow-hidden">
+                                    <div className={`absolute top-0 left-0 right-0 h-1.5 ${selectedReferral.urgency.color.split(' ')[0]}`}></div>
+                                    <p className="text-[11px] font-bold text-surface-400 uppercase tracking-widest mb-2">Priority Score</p>
+                                    <div className="flex items-baseline gap-2">
+                                        <span className={`text-4xl font-black font-display tracking-tight ${selectedReferral.urgency.color.split(' ')[1]}`}>
+                                            {selectedReferral.score}
+                                        </span>
+                                        <span className="text-sm font-bold text-surface-400">/ 100</span>
+                                    </div>
+                                    <p className={`text-sm font-bold mt-2 flex items-center gap-1.5 ${selectedReferral.urgency.color.split(' ')[1]}`}>
+                                        <selectedReferral.urgency.icon className="w-4 h-4" /> {selectedReferral.urgency.label}
+                                    </p>
+                                </div>
+                                <div className="border border-surface-100 rounded-2xl p-5">
+                                    <p className="text-[11px] font-bold text-surface-400 uppercase tracking-widest mb-2">Estimated Travel</p>
+                                    <div className="flex items-baseline gap-2">
+                                        <span className="text-4xl font-black font-display tracking-tight text-surface-900">
+                                            {selectedReferral.travelTime || selectedReferral.estimatedTravelTime || '45'}
+                                        </span>
+                                        <span className="text-sm font-bold text-surface-400">mins</span>
+                                    </div>
+                                    <p className="text-sm font-medium text-surface-500 mt-2 flex items-center gap-1.5">
+                                        <Clock className="w-4 h-4" /> Transit time
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="px-6 py-4 border-t border-surface-100 bg-surface-50 flex justify-between items-center shrink-0">
+                            <button
+                                onClick={() => window.print()}
+                                className="text-sm font-bold text-surface-600 hover:text-brand-600 flex items-center gap-2 transition-colors"
+                            >
+                                <Printer className="w-4 h-4" /> Print Referral
+                            </button>
+                            <button
+                                onClick={() => setSelectedReferral(null)}
+                                className="px-6 py-2.5 bg-surface-900 hover:bg-brand-600 text-white font-semibold rounded-xl transition-all shadow-sm flex items-center gap-2"
+                            >
+                                <X className="w-4 h-4" /> Close / Back to Registry
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
