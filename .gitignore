@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+.env.local
+.DS_Store
+mock-backend/node_modules/
+rural-referral-frontend/node_modules/
+rural-referral-frontend/dist/
